@@ -1,6 +1,6 @@
 # EMC-GCN
 
-Code and datasets of our paper "Enhanced Multi-Channel Graph Convolutional Network for Aspect Sentiment Triplet Extraction" accepted by ACL 2022.
+Code and datasets of our paper "[Enhanced Multi-Channel Graph Convolutional Network for Aspect Sentiment Triplet Extraction](https://aclanthology.org/2022.acl-long.212/)" accepted by ACL 2022.
 
 ## Requirements
 
@@ -10,6 +10,8 @@ Code and datasets of our paper "Enhanced Multi-Channel Graph Convolutional Netwo
 - transformers==3.4.0
 - argparse==1.1
 
+pip install scikit-learn
+pip install protobuf==3.20.0
 ## Training
 
 To train the EMC-GCN model, run:
