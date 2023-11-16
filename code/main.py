@@ -116,6 +116,15 @@ def train(args):
                 else:
                     loss = F.cross_entropy(preds_flatten, tags_flatten, weight=weight, ignore_index=-1)
 
+            # Modification on loss function, adding L1 regularizer
+            # l1_reg = torch.tensor(0.0, requires_grad=True)
+            # for param in model.parameters():
+            #     l1_reg = l1_reg + torch.sum(torch.abs(param))
+
+            # # Add L1 regularization to the original loss
+            # l1_lambda = 1e-4
+            # loss += l1_lambda * l1_reg
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -123,7 +132,8 @@ def train(args):
         joint_precision, joint_recall, joint_f1 = eval(model, devset, args)
 
         if joint_f1 > best_joint_f1:
-            model_path = args.model_dir + 'bert' + args.task + '.pt'
+            # model_path = args.model_dir + 'bert' + args.task + 'baseline' + '.pt'
+            model_path = args.model_dir + 'bert' + args.task + 'baseline' + '.pt'
             torch.save(model, model_path)
             best_joint_f1 = joint_f1
             best_joint_epoch = i
@@ -177,7 +187,7 @@ def eval(model, dataset, args, FLAG=False):
 
 def test(args):
     print("Evaluation on testset:")
-    model_path = args.model_dir + 'bert' + args.task + '.pt'
+    model_path = args.model_dir + 'bert' + args.task + 'baseline' + '.pt'
     model = torch.load(model_path).to(args.device)
     model.eval()
 
