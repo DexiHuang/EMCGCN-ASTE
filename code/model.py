@@ -124,7 +124,7 @@ class EMCGCN(torch.nn.Module):
     def __init__(self, args):
         super(EMCGCN, self).__init__()
         self.args = args
-        self.bert = BertModel.from_pretrained(args.bert_model_path)
+        self.bert = BertModel.from_pretrained(args.bert_model_path, return_dict=False)
         self.tokenizer = BertTokenizer.from_pretrained(args.bert_model_path)
         self.dropout_output = torch.nn.Dropout(args.emb_dropout)
 
