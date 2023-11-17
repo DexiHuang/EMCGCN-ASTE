@@ -134,13 +134,15 @@ class Metric():
         predicted_set = set()
         for i in range(self.data_num):
             golden_aspect_spans = get_aspects(self.goldens[i], self.sen_lengths[i], self.tokens_ranges[i])
+            
             for spans in golden_aspect_spans:
                 golden_set.add(str(i) + '-' + '-'.join(map(str, spans)))
 
             predicted_aspect_spans = get_aspects(self.predictions[i], self.sen_lengths[i], self.tokens_ranges[i])
             for spans in predicted_aspect_spans:
                 predicted_set.add(str(i) + '-' + '-'.join(map(str, spans)))
-
+        # print(golden_set)
+        # print(predicted_set)
         correct_num = len(golden_set & predicted_set)
         precision = correct_num / len(predicted_set) if len(predicted_set) > 0 else 0
         recall = correct_num / len(golden_set) if len(golden_set) > 0 else 0

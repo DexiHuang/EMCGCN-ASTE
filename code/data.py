@@ -3,6 +3,7 @@ import torch
 import numpy as np
 from collections import OrderedDict, defaultdict
 from transformers import BertTokenizer
+from transformers import RobertaTokenizer
 
 
 sentiment2id = {'negative': 3, 'neutral': 4, 'positive': 5}
@@ -76,17 +77,39 @@ class Instance(object):
         self.tags = torch.zeros(args.max_sequence_len, args.max_sequence_len).long()
         self.tags_symmetry = torch.zeros(args.max_sequence_len, args.max_sequence_len).long()
         self.mask = torch.zeros(args.max_sequence_len)
-
         for i in range(self.length):
             self.bert_tokens_padding[i] = self.bert_tokens[i]
         self.mask[:self.length] = 1
+        
+        if args.encoder_model == 'bert':
+            token_start = 1
+            for i, w, in enumerate(self.tokens):
+                token_end = token_start + len(tokenizer.encode(w, add_special_tokens=False))
+                self.token_range.append([token_start, token_end-1])
+                token_start = token_end
+            assert self.length == self.token_range[-1][-1]+2
 
-        token_start = 1
-        for i, w, in enumerate(self.tokens):
-            token_end = token_start + len(tokenizer.encode(w, add_special_tokens=False))
-            self.token_range.append([token_start, token_end-1])
-            token_start = token_end
-        assert self.length == self.token_range[-1][-1]+2
+  
+        elif args.encoder_model == 'roberta':
+            # 主要改动点
+            decoded_tokens = [tokenizer.decode([token]).replace(' ','') for token in self.bert_tokens][1:-1]
+            self.token_range = []
+            
+            temp = 0
+            for i in range(len(self.tokens)):
+                for j in range(temp, len(decoded_tokens)):
+                    if self.tokens[i] == decoded_tokens[j]:
+                        self.token_range.append([j+1,j+1])
+                        temp = j + 1
+                        break
+                    if self.tokens[i].startswith(decoded_tokens[j]):
+                        for delta in range(temp, len(decoded_tokens) + 1):
+                            if self.tokens[i] == ''.join(decoded_tokens[j:delta]):
+                                self.token_range.append([j+1,delta])
+                                temp = delta
+                                break
+                        break
+            assert self.length == self.token_range[-1][-1]+2
 
         self.aspect_tags[self.length:] = -1
         self.aspect_tags[0] = -1
@@ -252,7 +275,10 @@ class Instance(object):
 
 def load_data_instances(sentence_packs, post_vocab, deprel_vocab, postag_vocab, synpost_vocab, args):
     instances = list()
-    tokenizer = BertTokenizer.from_pretrained(args.bert_model_path)
+    if args.encoder_model == 'roberta':
+        tokenizer = RobertaTokenizer.from_pretrained(args.roberta_model_path)
+    elif args.encoder_model == 'bert':
+        tokenizer = BertTokenizer.from_pretrained(args.bert_model_path)
     for sentence_pack in sentence_packs:
         instances.append(Instance(tokenizer, sentence_pack, post_vocab, deprel_vocab, postag_vocab, synpost_vocab, args))
     return instances

@@ -1,0 +1,6 @@
+﻿code/__pycache__
+code/.ipynb_checkpoints
+code/test.ipynb
+code/torch-1.13.1+cu116-cp37-cp37m-win_amd64.whl
+code/torchvision-0.14.1+cu116-cp37-cp37m-win_amd64.whl
+code/savemodel

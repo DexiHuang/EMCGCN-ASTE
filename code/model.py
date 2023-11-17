@@ -3,6 +3,7 @@ import torch.nn
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import BertModel, BertTokenizer
+from transformers import RobertaModel, RobertaTokenizer
 
 
 class LayerNorm(nn.Module):
@@ -124,8 +125,12 @@ class EMCGCN(torch.nn.Module):
     def __init__(self, args):
         super(EMCGCN, self).__init__()
         self.args = args
-        self.bert = BertModel.from_pretrained(args.bert_model_path)
-        self.tokenizer = BertTokenizer.from_pretrained(args.bert_model_path)
+        if args.encoder_model == 'bert':
+            self.bert = BertModel.from_pretrained(args.bert_model_path)
+            self.tokenizer = BertTokenizer.from_pretrained(args.bert_model_path)
+        elif args.encoder_model == 'roberta':
+            self.bert = RobertaModel.from_pretrained(args.roberta_model_path)
+            self.tokenizer = RobertaTokenizer.from_pretrained(args.roberta_model_path)
         self.dropout_output = torch.nn.Dropout(args.emb_dropout)
 
         self.post_emb = torch.nn.Embedding(args.post_size, args.class_num, padding_idx=0)

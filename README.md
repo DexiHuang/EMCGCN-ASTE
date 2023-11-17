@@ -10,6 +10,8 @@ Code and datasets of our paper "[Enhanced Multi-Channel Graph Convolutional Netw
 - transformers==3.4.0
 - argparse==1.1
 
+pip install scikit-learn
+pip install protobuf==3.20.0
 ## Training
 
 To train the EMC-GCN model, run:
