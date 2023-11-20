@@ -116,23 +116,24 @@ def train(args):
                 else:
                     loss = F.cross_entropy(preds_flatten, tags_flatten, weight=weight, ignore_index=-1)
 
-            # # Modification on loss function, adding L1 regularizer
-            # l1_reg = torch.tensor(0.0, requires_grad=True)
-            # for param in model.parameters():
-            #     l1_reg = l1_reg + torch.sum(torch.abs(param))
+            if args.regularizer == 1:
+                # Modification on loss function, adding L1 regularizer
+                l1_reg = torch.tensor(0.0, requires_grad=True)
+                for param in model.parameters():
+                    l1_reg = l1_reg + torch.sum(torch.abs(param))
 
-            # # Add L1 regularization to the original loss
-            # l1_lambda = 1e-4
-            # loss += l1_lambda * l1_reg
+                # Add L1 regularization to the original loss
+                l1_lambda = 1e-4
+                loss += l1_lambda * l1_reg
+            elif args.regularizer == 2:
+                # Modification on loss function, adding L2 regularizer
+                l2_reg = torch.tensor(0.0, requires_grad=True)
+                for param in model.parameters():
+                    l2_reg = l2_reg + torch.sum(torch.square(param))
 
-            # Modification on loss function, adding L2 regularizer
-            l2_reg = torch.tensor(0.0, requires_grad=True)
-            for param in model.parameters():
-                l2_reg = l2_reg + torch.sum(torch.square(param))
-
-            # Add L1 regularization to the original loss
-            l2_lambda = 5e-6
-            loss += l2_lambda * l2_reg
+                # Add L1 regularization to the original loss
+                l2_lambda = 5e-6
+                loss += l2_lambda * l2_reg
 
             optimizer.zero_grad()
             loss.backward()
@@ -254,6 +255,8 @@ if __name__ == '__main__':
     parser.add_argument('--gcn_dim', type=int, default=300, help='dimension of GCN')
     parser.add_argument('--relation_constraint', default=True, action='store_true')
     parser.add_argument('--symmetry_decoding', default=False, action='store_true')
+
+    parser.add_argument('--regularizer', type=int, default=0)
 
     args = parser.parse_args()
 
