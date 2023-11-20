@@ -88,7 +88,7 @@ class Instance(object):
             assert self.length == self.token_range[-1][-1]+2
 
         #新增
-        elif args.encoder_model == 'roberta' or args.encoder_model == 'albert':
+        elif args.encoder_model == 'roberta':
             # 主要改动点
             decoded_tokens = [tokenizer.decode([token]).replace(' ','') for token in self.bert_tokens][1:-1]
             self.token_range = []
@@ -108,6 +108,31 @@ class Instance(object):
                                 break
                         break
             assert self.length == self.token_range[-1][-1]+2
+        elif args.encoder_model == 'albert':
+            # 主要改动点
+            decoded_tokens = [tokenizer.decode([token]).replace(' ','') for token in self.bert_tokens][1:-1]
+            temp_list = [token.lower() for token in self.tokens]
+            self.tokens = temp_list
+            self.token_range = []
+            
+            temp = 0
+            for i in range(len(self.tokens)):
+                if self.tokens[i] == '@':
+                    self.tokens[i] = '<unk>'
+                for j in range(temp, len(decoded_tokens)):
+                    if self.tokens[i] == decoded_tokens[j]:
+                        self.token_range.append([j+1,j+1])
+                        temp = j + 1
+                        break
+                    if self.tokens[i].startswith(decoded_tokens[j]):
+                        for delta in range(temp, len(decoded_tokens) + 1):
+                            if self.tokens[i] == ''.join(decoded_tokens[j:delta]):
+                                self.token_range.append([j+1,delta])
+                                temp = delta
+                                break
+                        break
+            assert self.length == self.token_range[-1][-1]+2
+
 
 
         self.aspect_tags[self.length:] = -1
