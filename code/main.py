@@ -69,6 +69,7 @@ def get_optimizer(model, args):
                 'lr': args.learning_rate
             },
         ]
+        optimizer = AdamW(optimizer_grouped_parameters, eps=args.adam_epsilon)
     #新增
     elif args.encoder_model == 'albert':
         no_decay = ['bias', 'LayerNorm.weight']
@@ -276,7 +277,7 @@ if __name__ == '__main__':
                         default="roberta-base",
                         help='pretrained bert model path')
     parser.add_argument('--albert_model_path', type=str,
-                        default="albert-base",
+                        default="albert-base-v2",
                         help='pretrained bert model path')
 
     parser.add_argument('--bert_feature_dim', type=int, default=768,
