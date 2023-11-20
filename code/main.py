@@ -8,51 +8,85 @@ import torch
 import torch.nn.functional as F
 from tqdm import trange
 
+#调用data.py
 from data import load_data_instances, DataIterator, label2id
+#调用model.py
 from model import EMCGCN
+#调用utils
 import utils
 
 import numpy as np
 
+#调用prepare_vocab.py
 from prepare_vocab import VocabHelp
 from transformers import AdamW
 
 
-def get_bert_optimizer(model, args):
+def get_optimizer(model, args):
     # # Prepare optimizer and schedule (linear warmup and decay)
-    no_decay = ['bias', 'LayerNorm.weight']
-    diff_part = ["bert.embeddings", "bert.encoder"]
+    if args.encoder_model == 'bert':
+        no_decay = ['bias', 'LayerNorm.weight']
+        diff_part = ["bert.embeddings", "bert.encoder"]
 
-    optimizer_grouped_parameters = [
-        {
-            "params": [p for n, p in model.named_parameters() if
-                    not any(nd in n for nd in no_decay) and any(nd in n for nd in diff_part)],
-            "weight_decay": args.weight_decay,
-            "lr": args.bert_lr
-        },
-        {
-            "params": [p for n, p in model.named_parameters() if
-                    any(nd in n for nd in no_decay) and any(nd in n for nd in diff_part)],
-            "weight_decay": 0.0,
-            "lr": args.bert_lr
-        },
-        {
-            "params": [p for n, p in model.named_parameters() if
-                    not any(nd in n for nd in no_decay) and not any(nd in n for nd in diff_part)],
-            "weight_decay": args.weight_decay,
-            "lr": args.learning_rate
-        },
-        {
-            "params": [p for n, p in model.named_parameters() if
-                    any(nd in n for nd in no_decay) and not any(nd in n for nd in diff_part)],
-            "weight_decay": 0.0,
-            "lr": args.learning_rate
-        },
-    ]
-    optimizer = AdamW(optimizer_grouped_parameters, eps=args.adam_epsilon)
+        optimizer_grouped_parameters = [
+            {
+                "params": [p for n, p in model.named_parameters() if
+                        not any(nd in n for nd in no_decay) and any(nd in n for nd in diff_part)],
+                "weight_decay": args.weight_decay,
+                "lr": args.bert_lr
+            },
+            {
+                "params": [p for n, p in model.named_parameters() if
+                        any(nd in n for nd in no_decay) and any(nd in n for nd in diff_part)],
+                "weight_decay": 0.0,
+                "lr": args.bert_lr
+            },
+            {
+                "params": [p for n, p in model.named_parameters() if
+                        not any(nd in n for nd in no_decay) and not any(nd in n for nd in diff_part)],
+                "weight_decay": args.weight_decay,
+                "lr": args.learning_rate
+            },
+            {
+                "params": [p for n, p in model.named_parameters() if
+                        any(nd in n for nd in no_decay) and not any(nd in n for nd in diff_part)],
+                "weight_decay": 0.0,
+                "lr": args.learning_rate
+            },
+        ]
+        optimizer = AdamW(optimizer_grouped_parameters, eps=args.adam_epsilon)
+    elif args.encoder_model == 'roberta':
+        no_decay = ['bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+            {
+                'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+                'weight_decay': args.weight_decay,
+                'lr': args.learning_rate
+            },
+            {
+                'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+                'weight_decay': 0.0,
+                'lr': args.learning_rate
+            },
+        ]
+    #新增
+    elif args.encoder_model == 'albert':
+        no_decay = ['bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+            {
+                'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+                'weight_decay': args.weight_decay,
+                'lr': args.learning_rate
+            },
+            {
+                'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+                'weight_decay': 0.0,
+                'lr': args.learning_rate
+            },
+        ]
 
+        optimizer = AdamW(optimizer_grouped_parameters, eps=args.adam_epsilon)
     return optimizer
-
 
 def train(args):
 
@@ -79,10 +113,12 @@ def train(args):
     if not os.path.exists(args.model_dir):
         os.makedirs(args.model_dir)
     model = EMCGCN(args).to(args.device)
-    optimizer = get_bert_optimizer(model, args)
+    optimizer = get_optimizer(model, args)
 
     # label = ['N', 'B-A', 'I-A', 'A', 'B-O', 'I-O', 'O', 'negative', 'neutral', 'positive']
+    #切换CPU
     weight = torch.tensor([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0]).float().cuda()
+    #weight = torch.tensor([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0]).float().cpu()
 
     best_joint_f1 = 0
     best_joint_epoch = 0
@@ -149,7 +185,6 @@ def train(args):
             best_joint_epoch = i
     print('best epoch: {}\tbest dev {} f1: {:.5f}\n\n'.format(best_joint_epoch, args.task, best_joint_f1))
 
-
 def eval(model, dataset, args, FLAG=False):
     model.eval()
     with torch.no_grad():
@@ -194,7 +229,6 @@ def eval(model, dataset, args, FLAG=False):
     model.train()
     return precision, recall, f1
 
-
 def test(args):
     print("Evaluation on testset:")
     model_path = args.model_dir + 'bert' + args.task + 'l2_reg_5e-6' + '.pt'
@@ -209,6 +243,8 @@ def test(args):
     instances = load_data_instances(sentence_packs, post_vocab, deprel_vocab, postag_vocab, synpost_vocab, args)
     testset = DataIterator(instances, args)
     eval(model, testset, args, False)
+
+
 
 
 if __name__ == '__main__':
@@ -229,11 +265,20 @@ if __name__ == '__main__':
                         help='max length of a sentence')
     parser.add_argument('--device', type=str, default="cuda",
                         help='gpu or cpu')
-
+    # 新增
+    parser.add_argument('--encoder_model', type=str,
+                        default="bert",
+                        help='pretrained bert model path')
     parser.add_argument('--bert_model_path', type=str,
                         default="bert-base-uncased",
                         help='pretrained bert model path')
-    
+    parser.add_argument('--roberta_model_path', type=str,
+                        default="roberta-base",
+                        help='pretrained bert model path')
+    parser.add_argument('--albert_model_path', type=str,
+                        default="albert-base",
+                        help='pretrained bert model path')
+
     parser.add_argument('--bert_feature_dim', type=int, default=768,
                         help='dimension of pretrained bert feature')
 
