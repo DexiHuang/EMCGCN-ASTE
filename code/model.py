@@ -3,7 +3,9 @@ import torch.nn
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import BertModel, BertTokenizer
-
+from transformers import RobertaModel, RobertaTokenizer
+#新增
+from transformers import AlbertModel, AlbertTokenizer
 
 class LayerNorm(nn.Module):
     "Construct a layernorm module (See citation for details)."
@@ -18,7 +20,6 @@ class LayerNorm(nn.Module):
         mean = x.mean(-1, keepdim=True)
         std = x.std(-1, keepdim=True)
         return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
-
 
 class RefiningStrategy(nn.Module):
     def __init__(self, hidden_dim, edge_dim, dim_e, dropout_ratio=0.5):
@@ -42,7 +43,6 @@ class RefiningStrategy(nn.Module):
         # edge = self.W(torch.cat([edge, node], dim=-1))
 
         return edge
-
 
 class GraphConvLayer(nn.Module):
     """ A GCN module operated on dependency graphs. """
@@ -85,7 +85,6 @@ class GraphConvLayer(nn.Module):
 
         return node_outputs, edge_outputs
 
-
 class Biaffine(nn.Module):
     def __init__(self, args, in1_features, in2_features, out_features, bias=(True, True)):
         super(Biaffine, self).__init__()
@@ -119,13 +118,20 @@ class Biaffine(nn.Module):
         biaffine = biaffine.contiguous().view(batch_size, len2, len1, self.out_features)
         return biaffine
 
-
 class EMCGCN(torch.nn.Module):
     def __init__(self, args):
         super(EMCGCN, self).__init__()
         self.args = args
-        self.bert = BertModel.from_pretrained(args.bert_model_path)
-        self.tokenizer = BertTokenizer.from_pretrained(args.bert_model_path)
+        if args.encoder_model == 'bert':
+            self.bert = BertModel.from_pretrained(args.bert_model_path)
+            self.tokenizer = BertTokenizer.from_pretrained(args.bert_model_path)
+        elif args.encoder_model == 'roberta':
+            self.bert = RobertaModel.from_pretrained(args.roberta_model_path)
+            self.tokenizer = RobertaTokenizer.from_pretrained(args.roberta_model_path)
+        #新增
+        elif args.encoder_model == 'albert':
+            self.bert = AlbertModel.from_pretrained(args.albert_model_path)
+            self.tokenizer = AlbertTokenizer.from_pretrained(args.albert_model_path)
         self.dropout_output = torch.nn.Dropout(args.emb_dropout)
 
         self.post_emb = torch.nn.Embedding(args.post_size, args.class_num, padding_idx=0)
@@ -148,7 +154,7 @@ class EMCGCN(torch.nn.Module):
                 GraphConvLayer(args.device, args.gcn_dim, 5*args.class_num, args.class_num, args.pooling))
 
     def forward(self, tokens, masks, word_pair_position, word_pair_deprel, word_pair_pos, word_pair_synpost):
-        bert_feature, _ = self.bert(tokens, masks)
+        bert_feature, _ = self.bert(tokens, masks, return_dict=False)
         bert_feature = self.dropout_output(bert_feature) 
 
         batch, seq = masks.shape
