@@ -96,11 +96,11 @@ def train(args):
             if args.relation_constraint:
                 predictions = model(tokens, masks, word_pair_position, word_pair_deprel, word_pair_pos, word_pair_synpost)
                 biaffine_pred, post_pred, deprel_pred, postag, synpost, final_pred = predictions[0], predictions[1], predictions[2], predictions[3], predictions[4], predictions[5]
-                l_ba = 0.10 * F.cross_entropy(biaffine_pred.reshape([-1, biaffine_pred.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
-                l_rpd = 0.01 * F.cross_entropy(post_pred.reshape([-1, post_pred.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
-                l_dep = 0.01 * F.cross_entropy(deprel_pred.reshape([-1, deprel_pred.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
-                l_psc = 0.01 * F.cross_entropy(postag.reshape([-1, postag.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
-                l_tbd = 0.01 * F.cross_entropy(synpost.reshape([-1, synpost.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
+                l_ba = 0.2 * F.cross_entropy(biaffine_pred.reshape([-1, biaffine_pred.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
+                l_rpd = 0.02 * F.cross_entropy(post_pred.reshape([-1, post_pred.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
+                l_dep = 0.02 * F.cross_entropy(deprel_pred.reshape([-1, deprel_pred.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
+                l_psc = 0.02 * F.cross_entropy(postag.reshape([-1, postag.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
+                l_tbd = 0.02 * F.cross_entropy(synpost.reshape([-1, synpost.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
 
                 if args.symmetry_decoding:
                     l_p = F.cross_entropy(final_pred.reshape([-1, final_pred.shape[3]]), tags_symmetry_flatten, weight=weight, ignore_index=-1)
@@ -116,6 +116,25 @@ def train(args):
                 else:
                     loss = F.cross_entropy(preds_flatten, tags_flatten, weight=weight, ignore_index=-1)
 
+            if args.regularizer == 1:
+                # Modification on loss function, adding L1 regularizer
+                l1_reg = torch.tensor(0.0, requires_grad=True)
+                for param in model.parameters():
+                    l1_reg = l1_reg + torch.sum(torch.abs(param))
+
+                # Add L1 regularization to the original loss
+                l1_lambda = 1e-4
+                loss += l1_lambda * l1_reg
+            elif args.regularizer == 2:
+                # Modification on loss function, adding L2 regularizer
+                l2_reg = torch.tensor(0.0, requires_grad=True)
+                for param in model.parameters():
+                    l2_reg = l2_reg + torch.sum(torch.square(param))
+
+                # Add L1 regularization to the original loss
+                l2_lambda = 5e-6
+                loss += l2_lambda * l2_reg
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -123,7 +142,8 @@ def train(args):
         joint_precision, joint_recall, joint_f1 = eval(model, devset, args)
 
         if joint_f1 > best_joint_f1:
-            model_path = args.model_dir + 'bert' + args.task + '.pt'
+            # model_path = args.model_dir + 'bert' + args.task + 'baseline' + '.pt'
+            model_path = args.model_dir + 'bert' + args.task + 'l2_reg_5e-6' + '.pt'
             torch.save(model, model_path)
             best_joint_f1 = joint_f1
             best_joint_epoch = i
@@ -177,7 +197,7 @@ def eval(model, dataset, args, FLAG=False):
 
 def test(args):
     print("Evaluation on testset:")
-    model_path = args.model_dir + 'bert' + args.task + '.pt'
+    model_path = args.model_dir + 'bert' + args.task + 'l2_reg_5e-6' + '.pt'
     model = torch.load(model_path).to(args.device)
     model.eval()
 
@@ -235,6 +255,8 @@ if __name__ == '__main__':
     parser.add_argument('--gcn_dim', type=int, default=300, help='dimension of GCN')
     parser.add_argument('--relation_constraint', default=True, action='store_true')
     parser.add_argument('--symmetry_decoding', default=False, action='store_true')
+
+    parser.add_argument('--regularizer', type=int, default=0)
 
     args = parser.parse_args()
 
