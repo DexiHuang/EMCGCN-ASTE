@@ -3,9 +3,7 @@ import torch.nn
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import BertModel, BertTokenizer
-from transformers import RobertaModel, RobertaTokenizer
-#新增
-from transformers import AlbertModel, AlbertTokenizer
+
 
 class LayerNorm(nn.Module):
     "Construct a layernorm module (See citation for details)."
@@ -20,6 +18,7 @@ class LayerNorm(nn.Module):
         mean = x.mean(-1, keepdim=True)
         std = x.std(-1, keepdim=True)
         return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
+
 
 class RefiningStrategy(nn.Module):
     def __init__(self, hidden_dim, edge_dim, dim_e, dropout_ratio=0.5):
@@ -44,6 +43,7 @@ class RefiningStrategy(nn.Module):
 
         return edge
 
+
 class GraphConvLayer(nn.Module):
     """ A GCN module operated on dependency graphs. """
 
@@ -61,10 +61,10 @@ class GraphConvLayer(nn.Module):
     def forward(self, weight_prob_softmax, weight_adj, gcn_inputs, self_loop):
         batch, seq, dim = gcn_inputs.shape
         weight_prob_softmax = weight_prob_softmax.permute(0, 3, 1, 2)
-    
+
         gcn_inputs = gcn_inputs.unsqueeze(1).expand(batch, self.edge_dim, seq, dim)
 
-        weight_prob_softmax += self_loop
+        weight_prob_softmax += self_loop      
         Ax = torch.matmul(weight_prob_softmax, gcn_inputs)
         if self.pooling == 'avg':
             Ax = Ax.mean(dim=1)
@@ -85,6 +85,7 @@ class GraphConvLayer(nn.Module):
 
         return node_outputs, edge_outputs
 
+
 class Biaffine(nn.Module):
     def __init__(self, args, in1_features, in2_features, out_features, bias=(True, True)):
         super(Biaffine, self).__init__()
@@ -96,8 +97,8 @@ class Biaffine(nn.Module):
         self.linear_input_size = in1_features + int(bias[0])
         self.linear_output_size = out_features * (in2_features + int(bias[1]))
         self.linear = torch.nn.Linear(in_features=self.linear_input_size,
-                                    out_features=self.linear_output_size,
-                                    bias=False)
+                                      out_features=self.linear_output_size,
+                                      bias=False)
 
     def forward(self, input1, input2):
         batch_size, len1, dim1 = input1.size()
@@ -111,34 +112,37 @@ class Biaffine(nn.Module):
             input2 = torch.cat((input2, ones), dim=2)
             dim2 += 1
         affine = self.linear(input1)
-        affine = affine.view(batch_size, len1*self.out_features, dim2)
+        affine = affine.view(batch_size, len1 * self.out_features, dim2)
         input2 = torch.transpose(input2, 1, 2)
         biaffine = torch.bmm(affine, input2)
         biaffine = torch.transpose(biaffine, 1, 2)
         biaffine = biaffine.contiguous().view(batch_size, len2, len1, self.out_features)
         return biaffine
 
+
 class EMCGCN(torch.nn.Module):
     def __init__(self, args):
         super(EMCGCN, self).__init__()
         self.args = args
-        if args.encoder_model == 'bert':
-            self.bert = BertModel.from_pretrained(args.bert_model_path)
-            self.tokenizer = BertTokenizer.from_pretrained(args.bert_model_path)
-        elif args.encoder_model == 'roberta':
-            self.bert = RobertaModel.from_pretrained(args.roberta_model_path)
-            self.tokenizer = RobertaTokenizer.from_pretrained(args.roberta_model_path)
-        #新增
-        elif args.encoder_model == 'albert':
-            self.bert = AlbertModel.from_pretrained(args.albert_model_path)
-            self.tokenizer = AlbertTokenizer.from_pretrained(args.albert_model_path)
+        self.bert = BertModel.from_pretrained(args.bert_model_path)
+        self.tokenizer = BertTokenizer.from_pretrained(args.bert_model_path)
         self.dropout_output = torch.nn.Dropout(args.emb_dropout)
 
-        self.post_emb = torch.nn.Embedding(args.post_size, args.class_num, padding_idx=0)
-        self.deprel_emb = torch.nn.Embedding(args.deprel_size, args.class_num, padding_idx=0)
-        self.postag_emb  = torch.nn.Embedding(args.postag_size, args.class_num, padding_idx=0)
-        self.synpost_emb = torch.nn.Embedding(args.synpost_size, args.class_num, padding_idx=0)
-        
+        self.post_flag = args.post
+        self.deprel_flag = args.deprel
+        self.postag_flag = args.postag
+        self.synpost_flag = args.synpost
+        self.arg_num = 1 + int(self.post_flag) + int(self.deprel_flag) + int(self.postag_flag) + int(self.synpost_flag)
+
+        if self.post_flag:
+            self.post_emb = torch.nn.Embedding(args.post_size, args.class_num, padding_idx=0)
+        if self.deprel_flag:
+            self.deprel_emb = torch.nn.Embedding(args.deprel_size, args.class_num, padding_idx=0)
+        if self.postag_flag:
+            self.postag_emb = torch.nn.Embedding(args.postag_size, args.class_num, padding_idx=0)
+        if self.synpost_flag:
+            self.synpost_emb = torch.nn.Embedding(args.synpost_size, args.class_num, padding_idx=0)
+
         self.triplet_biaffine = Biaffine(args, args.gcn_dim, args.gcn_dim, args.class_num, bias=(True, True))
         self.ap_fc = nn.Linear(args.bert_feature_dim, args.gcn_dim)
         self.op_fc = nn.Linear(args.bert_feature_dim, args.gcn_dim)
@@ -151,21 +155,31 @@ class EMCGCN(torch.nn.Module):
 
         for i in range(self.num_layers):
             self.gcn_layers.append(
-                GraphConvLayer(args.device, args.gcn_dim, 5*args.class_num, args.class_num, args.pooling))
+                GraphConvLayer(args.device, args.gcn_dim, self.arg_num * args.class_num, args.class_num, args.pooling))
 
     def forward(self, tokens, masks, word_pair_position, word_pair_deprel, word_pair_pos, word_pair_synpost):
+        post_flag = self.post_flag
+        deprel_flag = self.deprel_flag
+        postag_flag = self.postag_flag
+        synpost_flag = self.synpost_flag
+        arg_num = self.arg_num
+
         bert_feature, _ = self.bert(tokens, masks, return_dict=False)
-        bert_feature = self.dropout_output(bert_feature) 
+        bert_feature = self.dropout_output(bert_feature)
 
         batch, seq = masks.shape
         tensor_masks = masks.unsqueeze(1).expand(batch, seq, seq).unsqueeze(-1)
-        
+
         # * multi-feature
-        word_pair_post_emb = self.post_emb(word_pair_position)
-        word_pair_deprel_emb = self.deprel_emb(word_pair_deprel)
-        word_pair_postag_emb = self.postag_emb(word_pair_pos)
-        word_pair_synpost_emb = self.synpost_emb(word_pair_synpost)
-        
+        if post_flag:
+            word_pair_post_emb = self.post_emb(word_pair_position)
+        if deprel_flag:
+            word_pair_deprel_emb = self.deprel_emb(word_pair_deprel)
+        if postag_flag:
+            word_pair_postag_emb = self.postag_emb(word_pair_pos)
+        if synpost_flag:
+            word_pair_synpost_emb = self.synpost_emb(word_pair_synpost)
+
         # BiAffine
         ap_node = F.relu(self.ap_fc(bert_feature))
         op_node = F.relu(self.op_fc(bert_feature))
@@ -173,26 +187,61 @@ class EMCGCN(torch.nn.Module):
         gcn_input = F.relu(self.dense(bert_feature))
         gcn_outputs = gcn_input
 
-        weight_prob_list = [biaffine_edge, word_pair_post_emb, word_pair_deprel_emb, word_pair_postag_emb, word_pair_synpost_emb]
-        
+        weight_prob_list = [biaffine_edge]
+        if post_flag:
+            weight_prob_list.append(word_pair_post_emb)
+        if deprel_flag:
+            weight_prob_list.append(word_pair_deprel_emb)
+        if postag_flag:
+            weight_prob_list.append(word_pair_postag_emb)
+        if synpost_flag:
+            weight_prob_list.append(word_pair_synpost_emb)
+
         biaffine_edge_softmax = F.softmax(biaffine_edge, dim=-1) * tensor_masks
-        word_pair_post_emb_softmax = F.softmax(word_pair_post_emb, dim=-1) * tensor_masks
-        word_pair_deprel_emb_softmax = F.softmax(word_pair_deprel_emb, dim=-1) * tensor_masks
-        word_pair_postag_emb_softmax = F.softmax(word_pair_postag_emb, dim=-1) * tensor_masks
-        word_pair_synpost_emb_softmax = F.softmax(word_pair_synpost_emb, dim=-1) * tensor_masks
+        if post_flag:
+            word_pair_post_emb_softmax = F.softmax(word_pair_post_emb, dim=-1) * tensor_masks
+        if deprel_flag:
+            word_pair_deprel_emb_softmax = F.softmax(word_pair_deprel_emb, dim=-1) * tensor_masks
+        if postag_flag:
+            word_pair_postag_emb_softmax = F.softmax(word_pair_postag_emb, dim=-1) * tensor_masks
+        if synpost_flag:
+            word_pair_synpost_emb_softmax = F.softmax(word_pair_synpost_emb, dim=-1) * tensor_masks
 
         self_loop = []
         for _ in range(batch):
             self_loop.append(torch.eye(seq))
-        self_loop = torch.stack(self_loop).to(self.args.device).unsqueeze(1).expand(batch, 5*self.args.class_num, seq, seq) * tensor_masks.permute(0, 3, 1, 2).contiguous()
-        
-        weight_prob = torch.cat([biaffine_edge, word_pair_post_emb, word_pair_deprel_emb, \
-            word_pair_postag_emb, word_pair_synpost_emb], dim=-1)
-        weight_prob_softmax = torch.cat([biaffine_edge_softmax, word_pair_post_emb_softmax, \
-            word_pair_deprel_emb_softmax, word_pair_postag_emb_softmax, word_pair_synpost_emb_softmax], dim=-1)
+
+
+        self_loop = torch.stack(self_loop).to(self.args.device).unsqueeze(1).expand(batch, arg_num * self.args.class_num, seq, seq) * tensor_masks.permute(0, 3, 1, 2).contiguous()
+
+        temp_list = [biaffine_edge]
+        if post_flag:
+            temp_list.append(word_pair_post_emb)
+        if deprel_flag:
+            temp_list.append(word_pair_deprel_emb)
+        if postag_flag:
+            temp_list.append(word_pair_postag_emb)
+        if synpost_flag:
+            temp_list.append(word_pair_synpost_emb)
+        weight_prob = torch.cat(temp_list, dim=-1)
+        temp_list = [biaffine_edge_softmax]
+        if post_flag:
+            temp_list.append(word_pair_post_emb_softmax)
+        if deprel_flag:
+            temp_list.append(word_pair_deprel_emb_softmax)
+        if postag_flag:
+            temp_list.append(word_pair_postag_emb_softmax)
+        if synpost_flag:
+            temp_list.append(word_pair_synpost_emb_softmax)
+        weight_prob_softmax = torch.cat(temp_list, dim=-1)
 
         for _layer in range(self.num_layers):
-            gcn_outputs, weight_prob = self.gcn_layers[_layer](weight_prob_softmax, weight_prob, gcn_outputs, self_loop)  # [batch, seq, dim]
+            # print(weight_prob.shape)
+            # print(weight_prob_softmax.shape)
+            # print(gcn_outputs.shape)
+            # print(self_loop.shape)
+            gcn_outputs, weight_prob = self.gcn_layers[_layer](weight_prob_softmax, weight_prob, gcn_outputs,
+                                                               self_loop)  # [batch, seq, dim]
             weight_prob_list.append(weight_prob)
 
         return weight_prob_list

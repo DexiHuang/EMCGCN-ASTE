@@ -8,88 +8,62 @@ import torch
 import torch.nn.functional as F
 from tqdm import trange
 
-#调用data.py
 from data import load_data_instances, DataIterator, label2id
-#调用model.py
 from model import EMCGCN
-#调用utils
 import utils
 
 import numpy as np
 
-#调用prepare_vocab.py
 from prepare_vocab import VocabHelp
 from transformers import AdamW
 
 
-def get_optimizer(model, args):
+def get_bert_optimizer(model, args):
     # # Prepare optimizer and schedule (linear warmup and decay)
-    if args.encoder_model == 'bert':
-        no_decay = ['bias', 'LayerNorm.weight']
-        diff_part = ["bert.embeddings", "bert.encoder"]
+    no_decay = ['bias', 'LayerNorm.weight']
+    diff_part = ["bert.embeddings", "bert.encoder"]
 
-        optimizer_grouped_parameters = [
-            {
-                "params": [p for n, p in model.named_parameters() if
-                        not any(nd in n for nd in no_decay) and any(nd in n for nd in diff_part)],
-                "weight_decay": args.weight_decay,
-                "lr": args.bert_lr
-            },
-            {
-                "params": [p for n, p in model.named_parameters() if
-                        any(nd in n for nd in no_decay) and any(nd in n for nd in diff_part)],
-                "weight_decay": 0.0,
-                "lr": args.bert_lr
-            },
-            {
-                "params": [p for n, p in model.named_parameters() if
-                        not any(nd in n for nd in no_decay) and not any(nd in n for nd in diff_part)],
-                "weight_decay": args.weight_decay,
-                "lr": args.learning_rate
-            },
-            {
-                "params": [p for n, p in model.named_parameters() if
-                        any(nd in n for nd in no_decay) and not any(nd in n for nd in diff_part)],
-                "weight_decay": 0.0,
-                "lr": args.learning_rate
-            },
-        ]
-        optimizer = AdamW(optimizer_grouped_parameters, eps=args.adam_epsilon)
-    elif args.encoder_model == 'roberta':
-        no_decay = ['bias', 'LayerNorm.weight']
-        optimizer_grouped_parameters = [
-            {
-                'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
-                'weight_decay': args.weight_decay,
-                'lr': args.learning_rate
-            },
-            {
-                'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-                'weight_decay': 0.0,
-                'lr': args.learning_rate
-            },
-        ]
-        optimizer = AdamW(optimizer_grouped_parameters, eps=args.adam_epsilon)
-    #新增
-    elif args.encoder_model == 'albert':
-        no_decay = ['bias', 'LayerNorm.weight']
-        optimizer_grouped_parameters = [
-            {
-                'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
-                'weight_decay': args.weight_decay,
-                'lr': args.learning_rate
-            },
-            {
-                'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-                'weight_decay': 0.0,
-                'lr': args.learning_rate
-            },
-        ]
+    optimizer_grouped_parameters = [
+        {
+            "params": [p for n, p in model.named_parameters() if
+                    not any(nd in n for nd in no_decay) and any(nd in n for nd in diff_part)],
+            "weight_decay": args.weight_decay,
+            "lr": args.bert_lr
+        },
+        {
+            "params": [p for n, p in model.named_parameters() if
+                    any(nd in n for nd in no_decay) and any(nd in n for nd in diff_part)],
+            "weight_decay": 0.0,
+            "lr": args.bert_lr
+        },
+        {
+            "params": [p for n, p in model.named_parameters() if
+                    not any(nd in n for nd in no_decay) and not any(nd in n for nd in diff_part)],
+            "weight_decay": args.weight_decay,
+            "lr": args.learning_rate
+        },
+        {
+            "params": [p for n, p in model.named_parameters() if
+                    any(nd in n for nd in no_decay) and not any(nd in n for nd in diff_part)],
+            "weight_decay": 0.0,
+            "lr": args.learning_rate
+        },
+    ]
+    optimizer = AdamW(optimizer_grouped_parameters, eps=args.adam_epsilon)
 
-        optimizer = AdamW(optimizer_grouped_parameters, eps=args.adam_epsilon)
     return optimizer
 
+
+test_flag = False
+
+
 def train(args):
+
+    post_flag = args.post
+    deprel_flag = args.deprel
+    postag_flag = args.postag
+    synpost_flag = args.synpost
+    arg_num = 1 + int(post_flag) + int(deprel_flag) + int(postag_flag) + int(synpost_flag)
 
     # load dataset
     train_sentence_packs = json.load(open(args.prefix + args.dataset + '/train.json'))
@@ -107,6 +81,7 @@ def train(args):
 
     instances_train = load_data_instances(train_sentence_packs, post_vocab, deprel_vocab, postag_vocab, synpost_vocab, args)
     instances_dev = load_data_instances(dev_sentence_packs, post_vocab, deprel_vocab, postag_vocab, synpost_vocab, args)
+
     random.shuffle(instances_train)
     trainset = DataIterator(instances_train, args)
     devset = DataIterator(instances_dev, args)
@@ -114,12 +89,10 @@ def train(args):
     if not os.path.exists(args.model_dir):
         os.makedirs(args.model_dir)
     model = EMCGCN(args).to(args.device)
-    optimizer = get_optimizer(model, args)
+    optimizer = get_bert_optimizer(model, args)
 
     # label = ['N', 'B-A', 'I-A', 'A', 'B-O', 'I-O', 'O', 'negative', 'neutral', 'positive']
-    #切换CPU
     weight = torch.tensor([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0]).float().cuda()
-    #weight = torch.tensor([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0]).float().cpu()
 
     best_joint_f1 = 0
     best_joint_epoch = 0
@@ -132,19 +105,48 @@ def train(args):
             tags_symmetry_flatten = tags_symmetry.reshape([-1])
             if args.relation_constraint:
                 predictions = model(tokens, masks, word_pair_position, word_pair_deprel, word_pair_pos, word_pair_synpost)
-                biaffine_pred, post_pred, deprel_pred, postag, synpost, final_pred = predictions[0], predictions[1], predictions[2], predictions[3], predictions[4], predictions[5]
-                l_ba = 0.2 * F.cross_entropy(biaffine_pred.reshape([-1, biaffine_pred.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
-                l_rpd = 0.02 * F.cross_entropy(post_pred.reshape([-1, post_pred.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
-                l_dep = 0.02 * F.cross_entropy(deprel_pred.reshape([-1, deprel_pred.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
-                l_psc = 0.02 * F.cross_entropy(postag.reshape([-1, postag.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
-                l_tbd = 0.02 * F.cross_entropy(synpost.reshape([-1, synpost.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
+
+                post_return = post_flag
+                deprel_return = deprel_flag
+                postag_return = postag_flag
+                synpost_return = synpost_flag
+                biaffine_pred = predictions[0]
+                for choose in range(1, arg_num):
+                    if post_return:
+                        post_pred = predictions[choose]
+                        post_return = False
+                    elif deprel_return:
+                        deprel_pred = predictions[choose]
+                        deprel_return = False
+                    elif postag_return:
+                        postag = predictions[choose]
+                        postag_return = False
+                    elif synpost_return:
+                        synpost = predictions[choose]
+                        synpost_return = False
+                final_pred = predictions[arg_num]
+
+                l_ba = 0.10 * F.cross_entropy(biaffine_pred.reshape([-1, biaffine_pred.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
+                loss = l_ba
+                if post_flag:
+                    l_rpd = 0.01 * F.cross_entropy(post_pred.reshape([-1, post_pred.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
+                    loss += l_rpd
+                if deprel_flag:
+                    l_dep = 0.01 * F.cross_entropy(deprel_pred.reshape([-1, deprel_pred.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
+                    loss += l_dep
+                if postag_flag:
+                    l_psc = 0.01 * F.cross_entropy(postag.reshape([-1, postag.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
+                    loss += l_psc
+                if synpost_flag:
+                    l_tbd = 0.01 * F.cross_entropy(synpost.reshape([-1, synpost.shape[3]]), tags_symmetry_flatten, ignore_index=-1)
+                    loss += l_tbd
 
                 if args.symmetry_decoding:
                     l_p = F.cross_entropy(final_pred.reshape([-1, final_pred.shape[3]]), tags_symmetry_flatten, weight=weight, ignore_index=-1)
                 else:
                     l_p = F.cross_entropy(final_pred.reshape([-1, final_pred.shape[3]]), tags_flatten, weight=weight, ignore_index=-1)
+                loss += l_p
 
-                loss = l_ba + l_rpd + l_dep + l_psc + l_tbd + l_p
             else:
                 preds = model(tokens, masks, word_pair_position, word_pair_deprel, word_pair_pos, word_pair_synpost)[-1]
                 preds_flatten = preds.reshape([-1, preds.shape[3]])
@@ -153,25 +155,6 @@ def train(args):
                 else:
                     loss = F.cross_entropy(preds_flatten, tags_flatten, weight=weight, ignore_index=-1)
 
-            if args.regularizer == 1:
-                # Modification on loss function, adding L1 regularizer
-                l1_reg = torch.tensor(0.0, requires_grad=True)
-                for param in model.parameters():
-                    l1_reg = l1_reg + torch.sum(torch.abs(param))
-
-                # Add L1 regularization to the original loss
-                l1_lambda = 1e-4
-                loss += l1_lambda * l1_reg
-            elif args.regularizer == 2:
-                # Modification on loss function, adding L2 regularizer
-                l2_reg = torch.tensor(0.0, requires_grad=True)
-                for param in model.parameters():
-                    l2_reg = l2_reg + torch.sum(torch.square(param))
-
-                # Add L1 regularization to the original loss
-                l2_lambda = 5e-6
-                loss += l2_lambda * l2_reg
-
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -179,12 +162,13 @@ def train(args):
         joint_precision, joint_recall, joint_f1 = eval(model, devset, args)
 
         if joint_f1 > best_joint_f1:
-            # model_path = args.model_dir + 'bert' + args.task + 'baseline' + '.pt'
-            model_path = args.model_dir + 'bert' + args.task + 'l2_reg_5e-6' + '.pt'
+            model_path = args.model_dir + 'bert' + args.task + '.pt'
             torch.save(model, model_path)
             best_joint_f1 = joint_f1
             best_joint_epoch = i
+            print("best:", i)
     print('best epoch: {}\tbest dev {} f1: {:.5f}\n\n'.format(best_joint_epoch, args.task, best_joint_f1))
+
 
 def eval(model, dataset, args, FLAG=False):
     model.eval()
@@ -230,9 +214,10 @@ def eval(model, dataset, args, FLAG=False):
     model.train()
     return precision, recall, f1
 
+
 def test(args):
     print("Evaluation on testset:")
-    model_path = args.model_dir + 'bert' + args.task + 'l2_reg_5e-6' + '.pt'
+    model_path = args.model_dir + 'bert' + args.task + '.pt'
     model = torch.load(model_path).to(args.device)
     model.eval()
 
@@ -244,8 +229,6 @@ def test(args):
     instances = load_data_instances(sentence_packs, post_vocab, deprel_vocab, postag_vocab, synpost_vocab, args)
     testset = DataIterator(instances, args)
     eval(model, testset, args, False)
-
-
 
 
 if __name__ == '__main__':
@@ -266,20 +249,11 @@ if __name__ == '__main__':
                         help='max length of a sentence')
     parser.add_argument('--device', type=str, default="cuda",
                         help='gpu or cpu')
-    # 新增
-    parser.add_argument('--encoder_model', type=str,
-                        default="bert",
-                        help='pretrained bert model path')
+
     parser.add_argument('--bert_model_path', type=str,
                         default="bert-base-uncased",
                         help='pretrained bert model path')
-    parser.add_argument('--roberta_model_path', type=str,
-                        default="roberta-base",
-                        help='pretrained bert model path')
-    parser.add_argument('--albert_model_path', type=str,
-                        default="albert-base-v2",
-                        help='pretrained bert model path')
-
+    
     parser.add_argument('--bert_feature_dim', type=int, default=768,
                         help='dimension of pretrained bert feature')
 
@@ -301,8 +275,10 @@ if __name__ == '__main__':
     parser.add_argument('--gcn_dim', type=int, default=300, help='dimension of GCN')
     parser.add_argument('--relation_constraint', default=True, action='store_true')
     parser.add_argument('--symmetry_decoding', default=False, action='store_true')
-
-    parser.add_argument('--regularizer', type=int, default=0)
+    parser.add_argument('--post', default=True, action='store_true')
+    parser.add_argument('--deprel', default=True, action='store_true')
+    parser.add_argument('--postag', default=False, action='store_true')
+    parser.add_argument('--synpost', default=True, action='store_true')
 
     args = parser.parse_args()
 
