@@ -66,9 +66,9 @@ def train(args):
     arg_num = 1 + int(post_flag) + int(deprel_flag) + int(postag_flag) + int(synpost_flag)
 
     # load dataset
-    train_sentence_packs = json.load(open(args.prefix + args.dataset + '/train.json'))
+    train_sentence_packs = json.load(open(args.prefix + args.dataset + '/train.json', encoding="utf-8"))
     random.shuffle(train_sentence_packs)
-    dev_sentence_packs = json.load(open(args.prefix + args.dataset + '/dev.json'))
+    dev_sentence_packs = json.load(open(args.prefix + args.dataset + '/dev.json', encoding="utf-8"))
 
     post_vocab = VocabHelp.load_vocab(args.prefix + args.dataset + '/vocab_post.vocab')
     deprel_vocab = VocabHelp.load_vocab(args.prefix + args.dataset + '/vocab_deprel.vocab')
@@ -166,7 +166,7 @@ def train(args):
             torch.save(model, model_path)
             best_joint_f1 = joint_f1
             best_joint_epoch = i
-            print("best:", i)
+        print("best:", best_joint_epoch)
     print('best epoch: {}\tbest dev {} f1: {:.5f}\n\n'.format(best_joint_epoch, args.task, best_joint_f1))
 
 
@@ -221,7 +221,8 @@ def test(args):
     model = torch.load(model_path).to(args.device)
     model.eval()
 
-    sentence_packs = json.load(open(args.prefix + args.dataset + '/test.json'))
+    temp_path = args.prefix + args.dataset + '/test.json'
+    sentence_packs = json.load(open(temp_path, encoding='utf-8'))
     post_vocab = VocabHelp.load_vocab(args.prefix + args.dataset + '/vocab_post.vocab')
     deprel_vocab = VocabHelp.load_vocab(args.prefix + args.dataset + '/vocab_deprel.vocab')
     postag_vocab = VocabHelp.load_vocab(args.prefix + args.dataset + '/vocab_postag.vocab')
@@ -229,6 +230,14 @@ def test(args):
     instances = load_data_instances(sentence_packs, post_vocab, deprel_vocab, postag_vocab, synpost_vocab, args)
     testset = DataIterator(instances, args)
     eval(model, testset, args, False)
+
+
+def check_charset(file_path):
+    import chardet
+    with open(file_path, "rb") as f:
+        data = f.read(4)
+        charset = chardet.detect(data)['encoding']
+    return charset
 
 
 if __name__ == '__main__':
@@ -277,8 +286,9 @@ if __name__ == '__main__':
     parser.add_argument('--symmetry_decoding', default=False, action='store_true')
     parser.add_argument('--post', default=True, action='store_true')
     parser.add_argument('--deprel', default=True, action='store_true')
-    parser.add_argument('--postag', default=False, action='store_true')
+    parser.add_argument('--postag', default=True, action='store_true')
     parser.add_argument('--synpost', default=True, action='store_true')
+    parser.add_argument('--refine', default=False, action='store_true')
 
     args = parser.parse_args()
 
