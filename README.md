@@ -64,6 +64,18 @@ By setting the --relation_constraint parameter to true or false, you can adjust 
 
 By setting the --refine parameter to true or false, you can adjust the network structure to decide whether to use the refine strategy.
 
+### Roberta and Albert
+
+---
+
+Modifying the command parameters such as --encoder_model, --bert_model_path, --roberta_model_path to change another model.
+
+Setting --encoder_model roberta will switch Bert to RoBERTa. Similarly, --encoder_model albert-v2 will switch Bert to Albert.
+
+By setting the --roberta_model_path, you can switch to a specific model of roberta such as roberta_base_model.
+
+--bert_lr enables user to change the learning rate of bert or roberta model. Expected inputs shoule be in the form like 1e-3.
+
 ### Loss Function
 
 ---
