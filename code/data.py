@@ -90,7 +90,7 @@ class Instance(object):
             assert self.length == self.token_range[-1][-1]+2
 
         #新增
-        elif args.encoder_model == 'roberta' or args.encoder_model == 'albert':
+        elif args.encoder_model == 'roberta' or args.encoder_model == 'albert-v2':
             # 主要改动点
             # print(len(self.tokens))
             # print(self.tokens)
@@ -310,7 +310,7 @@ def load_data_instances(sentence_packs, post_vocab, deprel_vocab, postag_vocab, 
     #新增
     elif args.encoder_model == 'bert':
         tokenizer = BertTokenizer.from_pretrained(args.bert_model_path)
-    elif args.encoder_model == 'albert':
+    elif args.encoder_model == 'albert-v2':
         tokenizer = AlbertTokenizer.from_pretrained(args.albert_model_path)
     for sentence_pack in sentence_packs:
         instances.append(Instance(tokenizer, sentence_pack, post_vocab, deprel_vocab, postag_vocab, synpost_vocab, args))

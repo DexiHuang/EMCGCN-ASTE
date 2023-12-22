@@ -71,7 +71,7 @@ def get_optimizer(model, args):
         ]
         optimizer = AdamW(optimizer_grouped_parameters, eps=args.adam_epsilon)
     #新增
-    elif args.encoder_model == 'albert':
+    elif args.encoder_model == 'albert-v2':
         no_decay = ['bias', 'LayerNorm.weight']
         optimizer_grouped_parameters = [
             {

@@ -129,7 +129,7 @@ class EMCGCN(torch.nn.Module):
             self.bert = RobertaModel.from_pretrained(args.roberta_model_path)
             self.tokenizer = RobertaTokenizer.from_pretrained(args.roberta_model_path)
         #新增
-        elif args.encoder_model == 'albert':
+        elif args.encoder_model == 'albert-v2':
             self.bert = AlbertModel.from_pretrained(args.albert_model_path)
             self.tokenizer = AlbertTokenizer.from_pretrained(args.albert_model_path)
         self.dropout_output = torch.nn.Dropout(args.emb_dropout)
