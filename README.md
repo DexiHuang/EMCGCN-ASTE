@@ -70,7 +70,7 @@ By setting the --refine parameter to true or false, you can adjust the network s
 
 Modifying the command parameters such as --encoder_model, --bert_model_path, --roberta_model_path to change another model.
 
-Setting --encoder_model roberta will switch Bert to RoBERTa. Similarly, --encoder_model albert will switch Bert to Albert.
+Setting --encoder_model roberta will switch Bert to RoBERTa. Similarly, --encoder_model albert-v2 will switch Bert to Albert.
 
 By setting the --roberta_model_path, you can switch to a specific model of roberta such as roberta_base_model.
 
