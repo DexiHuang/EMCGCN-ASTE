@@ -60,6 +60,7 @@ class Instance(object):
     def __init__(self, tokenizer, sentence_pack, post_vocab, deprel_vocab, postag_vocab, synpost_vocab, args):
         self.id = sentence_pack['id']
         self.sentence = sentence_pack['sentence']
+        self.sentence = self.sentence.replace("é", "e")
         self.tokens = self.sentence.strip().split()
         self.postag = sentence_pack['postag']
         self.head = sentence_pack['head']
@@ -75,6 +76,7 @@ class Instance(object):
         self.tags = torch.zeros(args.max_sequence_len, args.max_sequence_len).long()
         self.tags_symmetry = torch.zeros(args.max_sequence_len, args.max_sequence_len).long()
         self.mask = torch.zeros(args.max_sequence_len)
+        # print(len(self.bert_tokens))
         for i in range(self.length):
             self.bert_tokens_padding[i] = self.bert_tokens[i]
         self.mask[:self.length] = 1
@@ -90,11 +92,36 @@ class Instance(object):
         #新增
         elif args.encoder_model == 'roberta' or args.encoder_model == 'albert':
             # 主要改动点
-            decoded_tokens = [tokenizer.decode([token]).replace(' ','') for token in self.bert_tokens][1:-1]
+            # print(len(self.tokens))
+            # print(self.tokens)
+            # print(len(self.bert_tokens))
+            # print(self.bert_tokens)
+            decoded_tokens = [tokenizer.decode([token]).replace(' ','') for token in self.bert_tokens]
+            # print(len(decoded_tokens))
+            # print(decoded_tokens)
+            decoded_tokens = decoded_tokens[1: -1]
+            # print(self.tokens)
+            # print(decoded_tokens)
             self.token_range = []
-            
+
+            temp_list = [token.lower() for token in self.tokens]
+            self.tokens = temp_list
+            # i=0 temp=0 j=0
+            # this this
+            # 对的
+            # temp = 1
+            # i=1
+            # place temp=2 has temp=3 i=3
+            # i=3 temp=3 realy real
+            # 找到对应范围
+
+
             temp = 0
             for i in range(len(self.tokens)):
+                if self.tokens[i] == '@' or self.tokens[i] == '>' or self.tokens[i] == '’':
+                    self.tokens[i] = '<unk>'
+                if self.tokens[i] == '``' or self.tokens[i] == "''":
+                    self.tokens[i] = '"'
                 for j in range(temp, len(decoded_tokens)):
                     if self.tokens[i] == decoded_tokens[j]:
                         self.token_range.append([j+1,j+1])
@@ -107,6 +134,7 @@ class Instance(object):
                                 temp = delta
                                 break
                         break
+
             assert self.length == self.token_range[-1][-1]+2
 
 
@@ -201,6 +229,10 @@ class Instance(object):
         for i in range(len(self.tokens)):
             start, end = self.token_range[i][0], self.token_range[i][1]
             for j in range(len(self.tokens)):
+                # print(self.tokens)
+                # print(self.token_range)
+                # print(len(self.tokens))
+                # print(len(self.token_range))
                 s, e = self.token_range[j][0], self.token_range[j][1]
                 for row in range(start, end + 1):
                     for col in range(s, e + 1):

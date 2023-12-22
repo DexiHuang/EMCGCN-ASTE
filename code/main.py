@@ -69,6 +69,7 @@ def get_optimizer(model, args):
                 'lr': args.learning_rate
             },
         ]
+        optimizer = AdamW(optimizer_grouped_parameters, eps=args.adam_epsilon)
     #新增
     elif args.encoder_model == 'albert':
         no_decay = ['bias', 'LayerNorm.weight']
@@ -261,7 +262,7 @@ if __name__ == '__main__':
                         help='option: train, test')
     parser.add_argument('--dataset', type=str, default="res14", choices=["res14", "lap14", "res15", "res16"],
                         help='dataset')
-    parser.add_argument('--max_sequence_len', type=int, default=102,
+    parser.add_argument('--max_sequence_len', type=int, default=124,
                         help='max length of a sentence')
     parser.add_argument('--device', type=str, default="cuda",
                         help='gpu or cpu')
@@ -276,7 +277,7 @@ if __name__ == '__main__':
                         default="roberta-base",
                         help='pretrained bert model path')
     parser.add_argument('--albert_model_path', type=str,
-                        default="albert-base",
+                        default="albert-base-v2",
                         help='pretrained bert model path')
 
     parser.add_argument('--bert_feature_dim', type=int, default=768,
